@@ -1,0 +1,42 @@
+
+import 'package:flutter/foundation.dart';
+
+import '../models/business_data.dart';
+
+class BusinessDataService extends ChangeNotifier {
+  static final BusinessDataService instance =
+      BusinessDataService._internal();
+
+  factory BusinessDataService() {
+    return instance;
+  }
+
+  BusinessDataService._internal();
+
+  final BusinessData data = BusinessData();
+
+  void addSale(double amount) {
+    data.totalRevenue += amount;
+    data.totalSales++;
+
+    notifyListeners();
+  }
+
+  void addCustomer() {
+    data.totalCustomers++;
+
+    notifyListeners();
+  }
+
+  void addProduct() {
+    data.totalProducts++;
+
+    notifyListeners();
+  }
+
+  void updateLowStock(int count) {
+    data.lowStockProducts = count;
+
+    notifyListeners();
+  }
+}
