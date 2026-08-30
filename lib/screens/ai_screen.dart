@@ -1,5 +1,7 @@
-
 import 'package:flutter/material.dart';
+
+import '../services/subscription_service.dart';
+import 'subscription_screen.dart';
 
 class AIScreen extends StatefulWidget {
   const AIScreen({super.key});
@@ -19,7 +21,17 @@ class _AIScreenState extends State<AIScreen> {
     ),
   ];
 
+  bool get _hasAI =>
+      SubscriptionService.instance.hasAI;
+
+  bool get _hasAdvancedAI =>
+      SubscriptionService.instance.hasAdvancedAI;
+
   void _sendMessage() {
+    if (!_hasAI) {
+      return;
+    }
+
     final text = _controller.text.trim();
 
     if (text.isEmpty) {
@@ -65,7 +77,20 @@ class _AIScreenState extends State<AIScreen> {
       return 'Hello! What would you like to work on today?';
     }
 
+    if (_hasAdvancedAI) {
+      return 'I’m ready to provide advanced business assistance. Once the full BizOS AI engine is connected to your business data, I’ll be able to provide deeper analysis and recommendations.';
+    }
+
     return 'I understand. I’ll be able to give you a more intelligent answer once the BizOS AI business engine is connected to your real business data.';
+  }
+
+  void _openPlans() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SubscriptionScreen(),
+      ),
+    );
   }
 
   @override
@@ -76,26 +101,21 @@ class _AIScreenState extends State<AIScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_hasAI) {
+      return _buildLockedScreen();
+    }
+
+    return _buildAIScreen();
+  }
+
+  Widget _buildLockedScreen() {
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0D),
-
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B0B0D),
         title: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: const Color(0xFFD71920),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: const Icon(
-                Icons.auto_awesome,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
+            _buildAIIcon(),
             const SizedBox(width: 12),
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,12 +139,125 @@ class _AIScreenState extends State<AIScreen> {
           ],
         ),
       ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 82,
+                height: 82,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF19191D),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: const Color(0xFF29292F),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: Color(0xFFD71920),
+                  size: 38,
+                ),
+              ),
 
+              const SizedBox(height: 24),
+
+              const Text(
+                'BizOS AI is locked',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              const Text(
+                'Upgrade your BizOS plan to unlock the AI business assistant and get intelligent help with your business.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFFA7A7AD),
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+
+              const SizedBox(height: 26),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _openPlans,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD71920),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                  child: const Text(
+                    'View Plans',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAIScreen() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0B0D),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0B0B0D),
+        title: Row(
+          children: [
+            _buildAIIcon(),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'BizOS AI',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  _hasAdvancedAI
+                      ? 'Advanced Assistant'
+                      : 'Business Assistant',
+                  style: const TextStyle(
+                    color: Color(0xFFA7A7AD),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                20,
+                16,
+                20,
+              ),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 return _MessageBubble(
@@ -133,9 +266,24 @@ class _AIScreenState extends State<AIScreen> {
               },
             ),
           ),
-
           _buildInputArea(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAIIcon() {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: const Color(0xFFD71920),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: const Icon(
+        Icons.auto_awesome,
+        color: Colors.white,
+        size: 20,
       ),
     );
   }
@@ -144,7 +292,12 @@ class _AIScreenState extends State<AIScreen> {
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+        padding: const EdgeInsets.fromLTRB(
+          14,
+          10,
+          14,
+          14,
+        ),
         decoration: const BoxDecoration(
           color: Color(0xFF111114),
           border: Border(
@@ -161,14 +314,17 @@ class _AIScreenState extends State<AIScreen> {
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _sendMessage(),
                 decoration: InputDecoration(
-                  hintText: 'Ask BizOS AI...',
+                  hintText: _hasAdvancedAI
+                      ? 'Ask Advanced BizOS AI...'
+                      : 'Ask BizOS AI...',
                   filled: true,
                   fillColor: const Color(0xFF1A1A1F),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
+                  contentPadding:
+                      const EdgeInsets.symmetric(
                     horizontal: 18,
                     vertical: 14,
                   ),
@@ -220,8 +376,9 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Align(
-      alignment:
-          message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: message.isUser
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(
           maxWidth: 330,

@@ -52,7 +52,7 @@ class SubscriptionPlan {
     priceUgx: 50000,
     basicAI: true,
     advancedAI: false,
-    basicReports: false,
+    basicReports: true,
     advancedReports: false,
     maxUsers: 1,
     socialMediaAI: false,

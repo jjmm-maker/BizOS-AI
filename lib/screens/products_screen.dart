@@ -1,7 +1,7 @@
-
 import 'package:flutter/material.dart';
 
 import '../services/business_data_service.dart';
+import '../services/database_service.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -21,12 +21,99 @@ class _ProductsScreenState extends State<ProductsScreen> {
   final BusinessDataService _service =
       BusinessDataService.instance;
 
+  final DatabaseService _database =
+      DatabaseService.instance;
+
+  bool _loading = true;
+  bool _refreshing = false;
+
   double get totalStockValue {
     return _products.fold(
       0,
       (sum, product) =>
           sum + (product.price * product.stock),
     );
+  }
+
+  int get lowStockCount {
+    return _products
+        .where((product) => product.stock <= 5)
+        .length;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _service.addListener(_onBusinessDataChanged);
+
+    _loadProducts();
+  }
+
+  @override
+  void dispose() {
+    _service.removeListener(_onBusinessDataChanged);
+    super.dispose();
+  }
+
+  void _onBusinessDataChanged() {
+    if (!mounted || _refreshing) {
+      return;
+    }
+
+    _loadProducts();
+  }
+
+  Future<void> _loadProducts() async {
+    if (_refreshing) {
+      return;
+    }
+
+    _refreshing = true;
+
+    try {
+      final savedProducts =
+          await _database.getProducts();
+
+      final products = savedProducts.map((item) {
+        return Product(
+          id: item['id']?.toString() ?? '',
+          name: item['name']?.toString() ?? '',
+          price:
+              (item['price'] as num?)?.toDouble() ?? 0,
+          stock:
+              (item['stock'] as num?)?.toInt() ?? 0,
+        );
+      }).toList();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _products
+          ..clear()
+          ..addAll(products);
+        _loading = false;
+      });
+
+      _updateBusinessData();
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _saveProducts() async {
+    await _database.saveProducts(
+      _products
+          .map((product) => product.toMap())
+          .toList(),
+    );
+  }
+
+  void _updateBusinessData() {
+    _service.setProductCount(_products.length);
+    _service.updateLowStock(lowStockCount);
   }
 
   void _showAddProduct() {
@@ -38,13 +125,21 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: card,
-      builder: (context) {
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      builder: (sheetContext) {
         return Padding(
           padding: EdgeInsets.fromLTRB(
             20,
             20,
             20,
-            MediaQuery.of(context).viewInsets.bottom + 20,
+            MediaQuery.of(sheetContext)
+                    .viewInsets
+                    .bottom +
+                20,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -63,8 +158,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
               TextField(
                 controller: nameController,
-                decoration:
-                    const InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Product name',
                   prefixIcon: Icon(
                     Icons.inventory_2_outlined,
@@ -77,9 +171,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
               TextField(
                 controller: priceController,
                 keyboardType:
-                    TextInputType.number,
-                decoration:
-                    const InputDecoration(
+                    const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
                   labelText: 'Price (UGX)',
                   prefixIcon: Icon(
                     Icons.payments_outlined,
@@ -93,8 +188,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 controller: stockController,
                 keyboardType:
                     TextInputType.number,
-                decoration:
-                    const InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Stock quantity',
                   prefixIcon: Icon(
                     Icons.numbers_outlined,
@@ -113,19 +207,29 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     backgroundColor: red,
                     foregroundColor:
                         Colors.white,
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                        14,
+                      ),
+                    ),
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     final name =
-                        nameController.text.trim();
+                        nameController.text
+                            .trim();
 
                     final price =
                         double.tryParse(
-                      priceController.text.trim(),
+                      priceController.text
+                          .trim(),
                     );
 
                     final stock =
                         int.tryParse(
-                      stockController.text.trim(),
+                      stockController.text
+                          .trim(),
                     );
 
                     if (name.isEmpty ||
@@ -133,34 +237,45 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         price <= 0 ||
                         stock == null ||
                         stock < 0) {
+                      ScaffoldMessenger.of(
+                        sheetContext,
+                      ).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Enter a valid product, price and stock.',
+                          ),
+                        ),
+                      );
                       return;
                     }
+
+                    final product = Product(
+                      id: DateTime.now()
+                          .microsecondsSinceEpoch
+                          .toString(),
+                      name: name,
+                      price: price,
+                      stock: stock,
+                    );
 
                     setState(() {
                       _products.insert(
                         0,
-                        Product(
-                          name: name,
-                          price: price,
-                          stock: stock,
-                        ),
+                        product,
                       );
                     });
 
-                    _service.addProduct();
+                    await _saveProducts();
 
-                    final lowStock = _products
-                        .where(
-                          (product) =>
-                              product.stock <= 5,
-                        )
-                        .length;
+                    _updateBusinessData();
 
-                    _service.updateLowStock(
-                      lowStock,
+                    if (!sheetContext.mounted) {
+                      return;
+                    }
+
+                    Navigator.pop(
+                      sheetContext,
                     );
-
-                    Navigator.pop(context);
                   },
                   child: const Text(
                     'Add Product',
@@ -177,19 +292,273 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
+  Future<void> _showEditProduct(
+    Product product,
+  ) async {
+    final nameController =
+        TextEditingController(text: product.name);
+
+    final priceController =
+        TextEditingController(
+      text: product.price.toStringAsFixed(0),
+    );
+
+    final stockController =
+        TextEditingController(
+      text: product.stock.toString(),
+    );
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(sheetContext)
+                    .viewInsets
+                    .bottom +
+                20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Edit Product',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Product name',
+                  prefixIcon: Icon(
+                    Icons.inventory_2_outlined,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              TextField(
+                controller: priceController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Price (UGX)',
+                  prefixIcon: Icon(
+                    Icons.payments_outlined,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              TextField(
+                controller: stockController,
+                keyboardType:
+                    TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Stock quantity',
+                  prefixIcon: Icon(
+                    Icons.numbers_outlined,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor: red,
+                    foregroundColor:
+                        Colors.white,
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                        14,
+                      ),
+                    ),
+                  ),
+                  onPressed: () async {
+                    final name =
+                        nameController.text
+                            .trim();
+
+                    final price =
+                        double.tryParse(
+                      priceController.text
+                          .trim(),
+                    );
+
+                    final stock =
+                        int.tryParse(
+                      stockController.text
+                          .trim(),
+                    );
+
+                    if (name.isEmpty ||
+                        price == null ||
+                        price <= 0 ||
+                        stock == null ||
+                        stock < 0) {
+                      ScaffoldMessenger.of(
+                        sheetContext,
+                      ).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Enter a valid product, price and stock.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final updated =
+                        Product(
+                      id: product.id,
+                      name: name,
+                      price: price,
+                      stock: stock,
+                    );
+
+                    final index =
+                        _products.indexWhere(
+                      (item) =>
+                          item.id ==
+                          product.id,
+                    );
+
+                    if (index != -1) {
+                      setState(() {
+                        _products[index] =
+                            updated;
+                      });
+
+                      await _saveProducts();
+                      _updateBusinessData();
+                    }
+
+                    if (!sheetContext.mounted) {
+                      return;
+                    }
+
+                    Navigator.pop(
+                      sheetContext,
+                    );
+                  },
+                  child: const Text(
+                    'Save Changes',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    nameController.dispose();
+    priceController.dispose();
+    stockController.dispose();
+  }
+
+  Future<void> _deleteProduct(
+    Product product,
+  ) async {
+    final confirmed =
+        await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: card,
+          title: const Text(
+            'Delete Product?',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: Text(
+            'Delete "${product.name}" from your catalogue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor: red,
+                foregroundColor:
+                    Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _products.removeWhere(
+        (item) => item.id == product.id,
+      );
+    });
+
+    await _saveProducts();
+
+    _updateBusinessData();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final lowStock = _products
-        .where(
-          (product) => product.stock <= 5,
-        )
-        .length;
-
     return Scaffold(
       backgroundColor: background,
 
       appBar: AppBar(
         backgroundColor: background,
+        elevation: 0,
         title: const Text(
           'Products',
           style: TextStyle(
@@ -204,130 +573,188 @@ class _ProductsScreenState extends State<ProductsScreen> {
         foregroundColor: Colors.white,
         onPressed: _showAddProduct,
         icon: const Icon(Icons.add),
-        label: const Text('Add Product'),
+        label: const Text(
+          'Add Product',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
 
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    title: 'Products',
-                    value:
-                        '${_products.length}',
-                    icon: Icons
-                        .inventory_2_outlined,
-                  ),
-                ),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(
+                color: red,
+              ),
+            )
+          : RefreshIndicator(
+              color: red,
+              onRefresh: _loadProducts,
+              child: Padding(
+                padding:
+                    const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Products',
+                            value:
+                                '${_products.length}',
+                            icon: Icons
+                                .inventory_2_outlined,
+                          ),
+                        ),
 
-                const SizedBox(width: 12),
+                        const SizedBox(width: 12),
 
-                Expanded(
-                  child: _StatCard(
-                    title: 'Low Stock',
-                    value: '$lowStock',
-                    icon: Icons
-                        .warning_amber_outlined,
-                  ),
-                ),
-              ],
-            ),
+                        Expanded(
+                          child: _StatCard(
+                            title: 'Low Stock',
+                            value:
+                                '$lowStockCount',
+                            icon: Icons
+                                .warning_amber_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
 
-            const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-            _WideStatCard(
-              title: 'Stock Value',
-              value:
-                  'UGX ${totalStockValue.toStringAsFixed(0)}',
-              icon: Icons
-                  .account_balance_wallet_outlined,
-            ),
+                    _WideStatCard(
+                      title: 'Stock Value',
+                      value:
+                          'UGX ${totalStockValue.toStringAsFixed(0)}',
+                      icon: Icons
+                          .account_balance_wallet_outlined,
+                    ),
 
-            const SizedBox(height: 28),
+                    const SizedBox(height: 28),
 
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Product Catalogue',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
+                    const Align(
+                      alignment:
+                          Alignment.centerLeft,
+                      child: Text(
+                        'Product Catalogue',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight:
+                              FontWeight.w900,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    Expanded(
+                      child: _products.isEmpty
+                          ? ListView(
+                              physics:
+                                  const AlwaysScrollableScrollPhysics(),
+                              children: const [
+                                SizedBox(
+                                  height: 100,
+                                ),
+                                Center(
+                                  child: Column(
+                                    mainAxisSize:
+                                        MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons
+                                            .inventory_2_outlined,
+                                        size: 52,
+                                        color: muted,
+                                      ),
+                                      SizedBox(
+                                        height: 14,
+                                      ),
+                                      Text(
+                                        'No products yet',
+                                        style:
+                                            TextStyle(
+                                          fontSize:
+                                              18,
+                                          fontWeight:
+                                              FontWeight
+                                                  .w800,
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        height: 6,
+                                      ),
+                                      Text(
+                                        'Add your first product to build your catalogue.',
+                                        textAlign:
+                                            TextAlign
+                                                .center,
+                                        style:
+                                            TextStyle(
+                                          color:
+                                              muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ListView.builder(
+                              physics:
+                                  const AlwaysScrollableScrollPhysics(),
+                              itemCount:
+                                  _products.length,
+                              itemBuilder:
+                                  (context, index) {
+                                final product =
+                                    _products[index];
+
+                                return _ProductTile(
+                                  product:
+                                      product,
+                                  onEdit: () =>
+                                      _showEditProduct(
+                                    product,
+                                  ),
+                                  onDelete: () =>
+                                      _deleteProduct(
+                                    product,
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
               ),
             ),
-
-            const SizedBox(height: 14),
-
-            Expanded(
-              child: _products.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisSize:
-                            MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons
-                                .inventory_2_outlined,
-                            size: 52,
-                            color: muted,
-                          ),
-
-                          SizedBox(height: 14),
-
-                          Text(
-                            'No products yet',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight:
-                                  FontWeight.w800,
-                            ),
-                          ),
-
-                          SizedBox(height: 6),
-
-                          Text(
-                            'Add your first product to build your catalogue.',
-                            textAlign:
-                                TextAlign.center,
-                            style: TextStyle(
-                              color: muted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount:
-                          _products.length,
-                      itemBuilder:
-                          (context, index) {
-                        return _ProductTile(
-                          product:
-                              _products[index],
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
 
 class Product {
+  final String id;
   final String name;
   final double price;
   final int stock;
 
   Product({
+    required this.id,
     required this.name,
     required this.price,
     required this.stock,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'price': price,
+      'stock': stock,
+    };
+  }
 }
 
 class _StatCard extends StatelessWidget {
@@ -361,9 +788,7 @@ class _StatCard extends StatelessWidget {
             icon,
             color: const Color(0xFFD71920),
           ),
-
           const SizedBox(height: 16),
-
           Text(
             title,
             style: const TextStyle(
@@ -371,9 +796,7 @@ class _StatCard extends StatelessWidget {
               fontSize: 12,
             ),
           ),
-
           const SizedBox(height: 4),
-
           Text(
             value,
             style: const TextStyle(
@@ -417,9 +840,7 @@ class _WideStatCard extends StatelessWidget {
             icon,
             color: const Color(0xFFD71920),
           ),
-
           const SizedBox(width: 14),
-
           Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
@@ -431,9 +852,7 @@ class _WideStatCard extends StatelessWidget {
                   fontSize: 12,
                 ),
               ),
-
               const SizedBox(height: 4),
-
               Text(
                 value,
                 style: const TextStyle(
@@ -451,15 +870,18 @@ class _WideStatCard extends StatelessWidget {
 
 class _ProductTile extends StatelessWidget {
   final Product product;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _ProductTile({
     required this.product,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isLowStock =
-        product.stock <= 5;
+    final isLowStock = product.stock <= 5;
 
     return Container(
       margin:
@@ -504,9 +926,7 @@ class _ProductTile extends StatelessWidget {
                         FontWeight.w800,
                   ),
                 ),
-
                 const SizedBox(height: 4),
-
                 Text(
                   'UGX ${product.price.toStringAsFixed(0)}',
                   style: const TextStyle(
@@ -533,7 +953,6 @@ class _ProductTile extends StatelessWidget {
                       : Colors.white,
                 ),
               ),
-
               Text(
                 isLowStock
                     ? 'Low stock'
@@ -541,6 +960,48 @@ class _ProductTile extends StatelessWidget {
                 style: const TextStyle(
                   color: Color(0xFFA7A7AD),
                   fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(width: 8),
+
+          PopupMenuButton<String>(
+            icon: const Icon(
+              Icons.more_vert,
+            ),
+            onSelected: (value) {
+              if (value == 'edit') {
+                onEdit();
+              } else if (value == 'delete') {
+                onDelete();
+              }
+            },
+            itemBuilder: (context) =>
+                const [
+              PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.edit_outlined,
+                    ),
+                    SizedBox(width: 10),
+                    Text('Edit'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.delete_outline,
+                    ),
+                    SizedBox(width: 10),
+                    Text('Delete'),
+                  ],
                 ),
               ),
             ],

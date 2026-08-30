@@ -4,6 +4,8 @@ class BusinessData {
   int totalCustomers;
   int totalProducts;
   int lowStockProducts;
+  double totalExpenses;
+  int totalExpensesCount;
 
   BusinessData({
     this.totalRevenue = 0,
@@ -11,5 +13,7 @@ class BusinessData {
     this.totalCustomers = 0,
     this.totalProducts = 0,
     this.lowStockProducts = 0,
+    this.totalExpenses = 0,
+    this.totalExpensesCount = 0,
   });
 }

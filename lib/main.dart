@@ -4,6 +4,7 @@ import 'screens/ai_screen.dart';
 import 'screens/auth/auth_gate.dart';
 import 'screens/customers_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/expenses_screen.dart';
 import 'screens/more_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/sales_screen.dart';
@@ -109,6 +110,7 @@ class _MainNavigationState extends State<MainNavigation> {
     SalesScreen(),
     CustomersScreen(),
     ProductsScreen(),
+    ExpensesScreen(),
     AIScreen(),
     MoreScreen(),
   ];
@@ -150,6 +152,12 @@ class _MainNavigationState extends State<MainNavigation> {
             icon: Icon(Icons.inventory_2_outlined),
             selectedIcon: Icon(Icons.inventory_2),
             label: 'Products',
+          ),
+
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Expenses',
           ),
 
           NavigationDestination(

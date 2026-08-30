@@ -1,15 +1,20 @@
-
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import 'subscription_screen.dart';
+import '../services/subscription_service.dart';
 import 'auth/auth_gate.dart';
+import 'reports_screen.dart';
+import 'subscription_screen.dart';
+import 'business_profile_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final account = AuthService.instance.currentAccount;
+    final subscription = SubscriptionService.instance;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0B0B0D),
       appBar: AppBar(
@@ -24,7 +29,7 @@ class MoreScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _buildProfileCard(),
+          _buildProfileCard(account),
           const SizedBox(height: 28),
 
           const Text(
@@ -41,13 +46,22 @@ class MoreScreen extends StatelessWidget {
             icon: Icons.business_outlined,
             title: 'Business Profile',
             subtitle: 'Manage your business information',
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BusinessProfileScreen(),
+                ),
+              );
+            },
           ),
 
           _SettingsTile(
             icon: Icons.account_balance_wallet_outlined,
             title: 'Currency',
-            subtitle: 'Ugandan Shilling (UGX)',
+            subtitle: account?.currency == 'UGX'
+                ? 'Ugandan Shilling (UGX)'
+                : account?.currency ?? 'Not set',
             onTap: () {},
           ),
 
@@ -56,6 +70,92 @@ class MoreScreen extends StatelessWidget {
             title: 'Notifications',
             subtitle: 'Manage business alerts',
             onTap: () {},
+          ),
+
+          const SizedBox(height: 24),
+
+          const Text(
+            'Reports',
+            style: TextStyle(
+              color: Color(0xFFA7A7AD),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          _SettingsTile(
+            icon: subscription.hasReports
+                ? Icons.bar_chart_outlined
+                : Icons.lock_outline,
+            title: 'Business Reports',
+            subtitle: subscription.hasReports
+                ? 'View business performance and insights'
+                : 'Upgrade your plan to unlock reports',
+            onTap: () {
+              if (!subscription.hasReports) {
+                showDialog(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      backgroundColor: const Color(0xFF151519),
+                      title: const Text(
+                        'Reports are locked',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      content: const Text(
+                        'Business Reports are available on the Basic, Pro and Advanced plans.',
+                        style: TextStyle(
+                          color: Color(0xFFA7A7AD),
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: Color(0xFFA7A7AD),
+                            ),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const SubscriptionScreen(),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                const Color(0xFFD71920),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('View Plans'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+                return;
+              }
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ReportsScreen(),
+                ),
+              );
+            },
           ),
 
           const SizedBox(height: 24),
@@ -94,13 +194,13 @@ class MoreScreen extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-
           const SizedBox(height: 10),
 
           _SettingsTile(
             icon: Icons.workspace_premium_outlined,
             title: 'Subscription & Plans',
-            subtitle: 'Manage your BizOS plan',
+            subtitle: account?.subscriptionName ??
+                'Free',
             onTap: () {
               Navigator.push(
                 context,
@@ -190,7 +290,16 @@ class MoreScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileCard() {
+  Widget _buildProfileCard(dynamic account) {
+    final businessName =
+        account?.businessName ?? 'My Business';
+
+    final ownerName =
+        account?.fullName ?? 'Business owner';
+
+    final subscription =
+        account?.subscriptionName ?? 'Free';
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -220,28 +329,61 @@ class MoreScreen extends StatelessWidget {
               size: 28,
             ),
           ),
+
           const SizedBox(width: 16),
-          const Expanded(
+
+          Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
-                  'My Business',
-                  style: TextStyle(
+                  businessName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                SizedBox(height: 5),
+
+                const SizedBox(height: 5),
+
                 Text(
-                  'Business owner',
-                  style: TextStyle(
+                  ownerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     color: Color(0xFFA7A7AD),
+                  ),
+                ),
+
+                const SizedBox(height: 7),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD71920)
+                        .withValues(alpha: 0.15),
+                    borderRadius:
+                        BorderRadius.circular(7),
+                  ),
+                  child: Text(
+                    '$subscription PLAN',
+                    style: const TextStyle(
+                      color: Color(0xFFF04444),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
+
           const Icon(
             Icons.chevron_right,
             color: Color(0xFFA7A7AD),

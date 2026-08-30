@@ -141,6 +141,68 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateAccount({
+    required String fullName,
+    required String email,
+    required String phone,
+    required String businessName,
+    required String businessType,
+    required String country,
+    required String currency,
+  }) async {
+    if (_account == null) {
+      return;
+    }
+
+    final updatedAccount = UserAccount(
+      id: _account!.id,
+      fullName: fullName.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      businessName: businessName.trim(),
+      businessType: businessType,
+      country: country,
+      currency: currency,
+      password: _account!.password,
+      subscriptionTier: _account!.subscriptionTier,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(
+      'account_full_name',
+      updatedAccount.fullName,
+    );
+    await prefs.setString(
+      'account_email',
+      updatedAccount.email,
+    );
+    await prefs.setString(
+      'account_phone',
+      updatedAccount.phone,
+    );
+    await prefs.setString(
+      'account_business_name',
+      updatedAccount.businessName,
+    );
+    await prefs.setString(
+      'account_business_type',
+      updatedAccount.businessType,
+    );
+    await prefs.setString(
+      'account_country',
+      updatedAccount.country,
+    );
+    await prefs.setString(
+      'account_currency',
+      updatedAccount.currency,
+    );
+
+    _account = updatedAccount;
+
+    notifyListeners();
+  }
+
   Future<void> changeSubscription(
     SubscriptionTier tier,
   ) async {
